@@ -94,3 +94,50 @@ class ComboEngine(ExampleEngine):
             possible_moves.sort(key=str)
             move = possible_moves[0]
         return PlayResult(move, None, draw_offered=draw_offered)
+
+    
+class MyBot(ExampleEngine):
+    """Template code for hackathon participants to modify.
+
+    Quick start:
+    - Edit `search` to choose a move according to your strategy.
+    - You can keep it simple (pick from board.legal_moves) or implement a full search.
+    - Feel free to log with `logger.debug(...)` or `logger.info(...)` for debugging.
+
+    Ideas:
+    - Heuristics: prefer captures, checks, promotions, centralization.
+    - Search: implement minimax/negamax with alpha-beta pruning and a simple eval.
+    - Time: respect available time or increments if provided (see args).
+    - Constraints: obey `root_moves` if given (only choose among those).
+    - Draws: decide policies when a draw is offered (accept/reject based on evaluation).
+    """
+
+    def search(self, board: chess.Board, *args: HOMEMADE_ARGS_TYPE) -> PlayResult:
+        """
+        Called by the framework to get your move for the current position.
+
+        Args:
+          - board: The current chess position.
+          - args (optional): Typically (time_limit: Limit, ponder: bool, draw_offered: bool, root_moves: MOVE).
+            Note: These may or may not be provided depending on the adapter.
+
+        Template guidance:
+          - If you want to use time controls:
+              # time_limit.time (fixed) or per-color: white_clock/black_clock, white_inc/black_inc
+              # Decide how much time to spend this move, then search up to depth/time.
+          - If a draw is offered (third arg), decide whether to accept or play for win/draw.
+          - If `root_moves` (fourth arg) is provided as a list, only select from those moves.
+          - Use logging to understand what your bot is doing:
+              # logger.debug("Evaluated X moves, best was ...")
+
+        TODOs:
+          - Replace the random move with your selection logic.
+          - Add evaluation, search, or any heuristic you like.
+          - Respect `root_moves` and `time_limit` if you choose to support them.
+          - Optionally return a ponder move in the second PlayResult field.
+
+          Minimal starter: return any legal move quickly to avoid timeouts.
+        """
+        # NOTE: This baseline keeps behavior simple and unchanged on purpose.
+        # Replace this with your own logic (heuristics or a search algorithm).
+        return PlayResult(random.choice(list(board.legal_moves)), None)

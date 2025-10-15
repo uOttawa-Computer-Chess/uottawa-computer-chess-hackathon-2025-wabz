@@ -1,4 +1,5 @@
 *.yml
+.venv/
 **/__pycache__
 /engines/*
 !/engines/README.md
