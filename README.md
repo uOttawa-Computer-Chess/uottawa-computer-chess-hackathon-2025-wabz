@@ -1,4 +1,4 @@
-Environment Setup:
+Environment Setup (Recommends Python 3.10+)
 - Clone repo
 - Open VSCode and go to the program folder
 - Create a venv `python -m venv .venv`
