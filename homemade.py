@@ -750,6 +750,7 @@ class MyBot(ExampleEngine):
 
             if maximizing:
                 max_eval = -10**12
+                fully_searched = True
                 for m in ordered_moves:
                     b.push(m)
                     val, _ = alphabeta(b, depth - 1, alpha, beta, False, ply + 1)
@@ -760,13 +761,15 @@ class MyBot(ExampleEngine):
                     if max_eval > alpha:
                         alpha = max_eval
                     if alpha >= beta:
+                        fully_searched = False
                         break  # Beta cutoff
                 
-                if time.time() < deadline:
+                if fully_searched and best_move_found is not None and time.time() < deadline:
                     self.transposition_table[pos_key] = (depth, max_eval, best_move_found)
                 return max_eval, best_move_found
             else:
                 min_eval = 10**12
+                fully_searched = True
                 for m in ordered_moves:
                     b.push(m)
                     val, _ = alphabeta(b, depth - 1, alpha, beta, True, ply + 1)
@@ -777,9 +780,10 @@ class MyBot(ExampleEngine):
                     if min_eval < beta:
                         beta = min_eval
                     if alpha >= beta:
+                        fully_searched = False
                         break  # Alpha cutoff
                 
-                if time.time() < deadline:
+                if fully_searched and best_move_found is not None and time.time() < deadline:
                     self.transposition_table[pos_key] = (depth, min_eval, best_move_found)
                 return min_eval, best_move_found
 
@@ -804,7 +808,7 @@ class MyBot(ExampleEngine):
             if time_for_move < 0.3:
                 max_depth_target = 2  # Emergency
             else:
-                max_depth_target = round(math.log(3 * time_for_move) / math.log(3)) + 2
+                max_depth_target = round(math.log(3 * time_for_move) / math.log(3)) + 3
                 max_depth_target = max(2, min(8, max_depth_target))
 
             depth = 1
