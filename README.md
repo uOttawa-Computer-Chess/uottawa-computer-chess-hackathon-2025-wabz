@@ -68,7 +68,7 @@ python lichess_bot.py
 Or 
 
 ```bash
-python lichess_bot.py -v
+python lichess-bot.py -v
 ```
 
 If you want to see verbose logging output.
