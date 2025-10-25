@@ -17,9 +17,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# constants for flagging
+Exact, Lowerbound, Upperbound = range(3)
+
 class ExampleEngine(MinimalEngine):
     """An example engine that all homemade engines inherit."""
-
 
 class ComboEngine(ExampleEngine):
     """
@@ -85,6 +87,8 @@ class MyBot(ExampleEngine):
     iterative deepening, quiescence search, move ordering (MVV/LVA, history),
     transposition table, and a richer evaluator to make it competitive.
     """
+    def __init__(self): # transposition table for hashing
+        self.tt = {}
 
     def search(self, board: chess.Board, *args: HOMEMADE_ARGS_TYPE) -> PlayResult:
         # NOTE: The sections below are intentionally simple to keep the example short.
@@ -123,18 +127,11 @@ class MyBot(ExampleEngine):
             total_depth = 4
         elif budget >= 5:
             total_depth = 3
-        else:
+        elif budget >= 1:
             total_depth = 2
+        else:
+            total_depth = 1
         total_depth = max(1, int(total_depth))
-
-        values = {
-                chess.PAWN: 100,
-                chess.KNIGHT: 320,
-                chess.BISHOP: 330,
-                chess.ROOK: 500,
-                chess.QUEEN: 900,
-                chess.KING: 0,  # king material ignored (checkmates handled above)
-            }
 
         # --- simple material evaluator (White-positive score) ---
         def evaluate(b: chess.Board) -> int:
@@ -157,84 +154,11 @@ class MyBot(ExampleEngine):
             for pt, v in values.items():
                 score += v * (len(b.pieces(pt, chess.WHITE)) - len(b.pieces(pt, chess.BLACK)))
             return score
-        
-        def evaluate_anti_draw(b: chess.Board) -> int:
-            base_eval = evaluate(b)
-
-            if b.is_repetition(2):
-                our_perspective_eval = base_eval if b.turn == chess.WHITE else -base_eval
-                
-                # Count total material to determine game phase
-                total_material = sum(len(b.pieces(pt, c)) * values[pt] 
-                                for pt in [chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN]
-                                for c in [chess.WHITE, chess.BLACK])
-                
-                # Adaptive threshold based on game phase
-                if total_material > 6000:  # Opening/middlegame (lots of pieces)
-                    threshold = 150  # Need bigger advantage (1.5 pawns) to avoid repetition
-                elif total_material > 3000:  # Middlegame transitioning to endgame
-                    threshold = 75   # Medium advantage needed (0.75 pawns)
-                else:  # Endgame (few pieces left)
-                    threshold = 25   # Even small advantage matters (0.25 pawns)
-                
-                if our_perspective_eval > threshold:
-                    # Scale penalty with advantage
-                    penalty = min(abs(our_perspective_eval) * 0.8, 500)
-                    base_eval = base_eval - penalty if b.turn == chess.WHITE else base_eval + penalty
-            
-            return base_eval
-
-        # --- MVV-LVA move ordering ---
-        def order_moves(b: chess.Board, moves: list[chess.Move]) -> list[chess.Move]:
-            """Order moves using MVV-LVA (Most Valuable Victim - Least Valuable Attacker).
-            
-            This heuristic scores captures by:
-            1. Value of the captured piece (higher is better)
-            2. Value of the attacking piece (lower is better)
-            
-            Uses the same piece values as the evaluation function for consistency.
-            Non-captures get lower scores. Moves are sorted in descending order by score.
-            
-            :param b: The current board position
-            :param moves: List of legal moves to order
-            :return: Sorted list of moves (best moves first)
-            """
-            def move_score(move: chess.Move) -> int:
-                score = 0
-                
-                # Check if this is a capture
-                if b.is_capture(move):
-                    # Get the piece being captured (victim)
-                    victim_square = move.to_square
-                    victim_piece = b.piece_at(victim_square)
-                    
-                    # Get the piece doing the capturing (attacker)
-                    attacker_piece = b.piece_at(move.from_square)
-                    
-                    if victim_piece and attacker_piece:
-                        victim_value = values.get(victim_piece.piece_type, 0)
-                        attacker_value = values.get(attacker_piece.piece_type, 0)
-                        
-                        # MVV-LVA: High victim value + low attacker value = good
-                        # Use same values as evaluation (100-900 range)
-                        # Multiply victim by 10 to prioritize it over attacker penalty
-                        score = victim_value * 10 - attacker_value
-                
-                # Promotions are also valuable (roughly gaining 800 material: Q-P)
-                if move.promotion:
-                    promotion_value = values.get(move.promotion, 0)
-                    # Score based on actual promotion gain (promoted piece - pawn)
-                    score += (promotion_value - values[chess.PAWN]) * 10
-                
-                return score
-            
-            # Sort moves by score in descending order (highest score first)
-            return sorted(moves, key=move_score, reverse=True)
 
         # --- plain minimax (no alpha-beta) ---
         def minimax(b: chess.Board, depth: int, maximizing: bool) -> int:
             if depth == 0 or b.is_game_over():
-                return evaluate_anti_draw(b)
+                return evaluate(b)
 
             if maximizing:
                 best = -10**12
@@ -263,15 +187,26 @@ class MyBot(ExampleEngine):
             Beta is the best value the minimizer can guarantee (upper bound).
             When alpha >= beta, we can prune (stop searching) this branch.
             """
-            if depth == 0 or b.is_game_over():
-                return evaluate_anti_draw(b)
+            hash = board.zobrist_hash()
+            entry = self.tt.get(hash)
+            if entry and entry["depth"] >= depth:
+                flag = entry["flag"]
+                score = entry["score"]
+                if flag == EXACT:
+                    return score
+                elif flag == LOWERBOUND and score > alpha:
+                    alpha = score
+                elif flag == UPPERBOUND and score < beta:
+                    beta = score
+                if alpha >= beta:
+                    return score
 
-            # Order moves for better pruning
-            ordered_moves = order_moves(b, list(b.legal_moves))
+            if depth == 0 or b.is_game_over():
+                return evaluate(b)
 
             if maximizing:
                 max_eval = -10**12
-                for m in ordered_moves:
+                for m in b.legal_moves:
                     b.push(m)
                     val = alphabeta(b, depth - 1, alpha, beta, False)
                     b.pop()
@@ -281,10 +216,15 @@ class MyBot(ExampleEngine):
                         alpha = max_eval
                     if alpha >= beta:
                         break  # Beta cutoff: opponent won't allow this line
+                # store results in transposition table
+                flag = EXACT
+                if max_eval <= alpha: flag = UPPERBOUND
+                elif max_eval >= beta: flag = LOWERBOUND
+                self.transposition_table[hash] = {"depth": depth, "score": max_eval, "flag": flag}
                 return max_eval
             else:
                 min_eval = 10**12
-                for m in ordered_moves:
+                for m in b.legal_moves:
                     b.push(m)
                     val = alphabeta(b, depth - 1, alpha, beta, True)
                     b.pop()
@@ -294,6 +234,11 @@ class MyBot(ExampleEngine):
                         beta = min_eval
                     if alpha >= beta:
                         break  # Alpha cutoff: we won't allow this line
+                # store results in transposition table
+                flag = EXACT
+                if min_eval <= alpha: flag = UPPERBOUND
+                elif min_eval >= beta: flag = LOWERBOUND
+                self.transposition_table[hash] = {"depth": depth, "score": min_eval, "flag": flag}
                 return min_eval
 
         # --- root move selection with alpha-beta ---
@@ -301,9 +246,6 @@ class MyBot(ExampleEngine):
         if not legal:
             # Should not happen during normal play; fall back defensively
             return PlayResult(random.choice(list(board.legal_moves)), None)
-
-        # Order moves at root for better search efficiency
-        ordered_legal = order_moves(board, legal)
 
         maximizing = board.turn == chess.WHITE
         best_move = None
@@ -314,7 +256,7 @@ class MyBot(ExampleEngine):
         beta = 10**12
 
         # Lookahead depth chosen by the simple time heuristic; subtract one for the root move
-        for m in ordered_legal:
+        for m in legal:
             board.push(m)
             val = alphabeta(board, total_depth - 1, alpha, beta, not maximizing)
             board.pop()
