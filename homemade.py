@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 class ExampleEngine(MinimalEngine):
     """An example engine that all homemade engines inherit."""
-    
+
+
 class ComboEngine(ExampleEngine):
     """
     Get a move using multiple different methods.
@@ -115,16 +116,25 @@ class MyBot(ExampleEngine):
         inc = my_inc if isinstance(my_inc, (int, float)) else 0
         budget = (remaining or 0) + 2 * inc  # crude increment bonus
         if remaining is None:
-            total_depth = 4
+            total_depth = 5
         elif budget >= 60:
-            total_depth = 4
+            total_depth = 5
         elif budget >= 20:
-            total_depth = 3
+            total_depth = 4
         elif budget >= 5:
-            total_depth = 2
+            total_depth = 3
         else:
-            total_depth = 1
+            total_depth = 2
         total_depth = max(1, int(total_depth))
+
+        values = {
+                chess.PAWN: 100,
+                chess.KNIGHT: 320,
+                chess.BISHOP: 330,
+                chess.ROOK: 500,
+                chess.QUEEN: 900,
+                chess.KING: 0,  # king material ignored (checkmates handled above)
+            }
 
         # --- simple material evaluator (White-positive score) ---
         def evaluate(b: chess.Board) -> int:
@@ -147,11 +157,84 @@ class MyBot(ExampleEngine):
             for pt, v in values.items():
                 score += v * (len(b.pieces(pt, chess.WHITE)) - len(b.pieces(pt, chess.BLACK)))
             return score
+        
+        def evaluate_anti_draw(b: chess.Board) -> int:
+            base_eval = evaluate(b)
+
+            if b.is_repetition(2):
+                our_perspective_eval = base_eval if b.turn == chess.WHITE else -base_eval
+                
+                # Count total material to determine game phase
+                total_material = sum(len(b.pieces(pt, c)) * values[pt] 
+                                for pt in [chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN]
+                                for c in [chess.WHITE, chess.BLACK])
+                
+                # Adaptive threshold based on game phase
+                if total_material > 6000:  # Opening/middlegame (lots of pieces)
+                    threshold = 150  # Need bigger advantage (1.5 pawns) to avoid repetition
+                elif total_material > 3000:  # Middlegame transitioning to endgame
+                    threshold = 75   # Medium advantage needed (0.75 pawns)
+                else:  # Endgame (few pieces left)
+                    threshold = 25   # Even small advantage matters (0.25 pawns)
+                
+                if our_perspective_eval > threshold:
+                    # Scale penalty with advantage
+                    penalty = min(abs(our_perspective_eval) * 0.8, 500)
+                    base_eval = base_eval - penalty if b.turn == chess.WHITE else base_eval + penalty
+            
+            return base_eval
+
+        # --- MVV-LVA move ordering ---
+        def order_moves(b: chess.Board, moves: list[chess.Move]) -> list[chess.Move]:
+            """Order moves using MVV-LVA (Most Valuable Victim - Least Valuable Attacker).
+            
+            This heuristic scores captures by:
+            1. Value of the captured piece (higher is better)
+            2. Value of the attacking piece (lower is better)
+            
+            Uses the same piece values as the evaluation function for consistency.
+            Non-captures get lower scores. Moves are sorted in descending order by score.
+            
+            :param b: The current board position
+            :param moves: List of legal moves to order
+            :return: Sorted list of moves (best moves first)
+            """
+            def move_score(move: chess.Move) -> int:
+                score = 0
+                
+                # Check if this is a capture
+                if b.is_capture(move):
+                    # Get the piece being captured (victim)
+                    victim_square = move.to_square
+                    victim_piece = b.piece_at(victim_square)
+                    
+                    # Get the piece doing the capturing (attacker)
+                    attacker_piece = b.piece_at(move.from_square)
+                    
+                    if victim_piece and attacker_piece:
+                        victim_value = values.get(victim_piece.piece_type, 0)
+                        attacker_value = values.get(attacker_piece.piece_type, 0)
+                        
+                        # MVV-LVA: High victim value + low attacker value = good
+                        # Use same values as evaluation (100-900 range)
+                        # Multiply victim by 10 to prioritize it over attacker penalty
+                        score = victim_value * 10 - attacker_value
+                
+                # Promotions are also valuable (roughly gaining 800 material: Q-P)
+                if move.promotion:
+                    promotion_value = values.get(move.promotion, 0)
+                    # Score based on actual promotion gain (promoted piece - pawn)
+                    score += (promotion_value - values[chess.PAWN]) * 10
+                
+                return score
+            
+            # Sort moves by score in descending order (highest score first)
+            return sorted(moves, key=move_score, reverse=True)
 
         # --- plain minimax (no alpha-beta) ---
         def minimax(b: chess.Board, depth: int, maximizing: bool) -> int:
             if depth == 0 or b.is_game_over():
-                return evaluate(b)
+                return evaluate_anti_draw(b)
 
             if maximizing:
                 best = -10**12
@@ -181,11 +264,14 @@ class MyBot(ExampleEngine):
             When alpha >= beta, we can prune (stop searching) this branch.
             """
             if depth == 0 or b.is_game_over():
-                return evaluate(b)
+                return evaluate_anti_draw(b)
+
+            # Order moves for better pruning
+            ordered_moves = order_moves(b, list(b.legal_moves))
 
             if maximizing:
                 max_eval = -10**12
-                for m in b.legal_moves:
+                for m in ordered_moves:
                     b.push(m)
                     val = alphabeta(b, depth - 1, alpha, beta, False)
                     b.pop()
@@ -198,7 +284,7 @@ class MyBot(ExampleEngine):
                 return max_eval
             else:
                 min_eval = 10**12
-                for m in b.legal_moves:
+                for m in ordered_moves:
                     b.push(m)
                     val = alphabeta(b, depth - 1, alpha, beta, True)
                     b.pop()
@@ -216,6 +302,9 @@ class MyBot(ExampleEngine):
             # Should not happen during normal play; fall back defensively
             return PlayResult(random.choice(list(board.legal_moves)), None)
 
+        # Order moves at root for better search efficiency
+        ordered_legal = order_moves(board, legal)
+
         maximizing = board.turn == chess.WHITE
         best_move = None
         best_eval = -10**12 if maximizing else 10**12
@@ -225,7 +314,7 @@ class MyBot(ExampleEngine):
         beta = 10**12
 
         # Lookahead depth chosen by the simple time heuristic; subtract one for the root move
-        for m in legal:
+        for m in ordered_legal:
             board.push(m)
             val = alphabeta(board, total_depth - 1, alpha, beta, not maximizing)
             board.pop()
