@@ -18,7 +18,8 @@ Lichess Connection:
 You can run a quick smoke test in a sample python file as in:
 
 From the command line:
-```export lichess_token = "YOUR_TOKEN"```
+```export lichess_token="YOUR_TOKEN"``` (in linux/max osx)
+```set lichess_token="YOUR_TOKEN"``` (in Windows)
 
 In a test_token.py file run:
 ```
