@@ -203,7 +203,45 @@ class MyBot(ExampleEngine):
                         best = val
                 return best
 
-        # --- root move selection ---
+        # --- alpha-beta pruning (recursive, efficient) ---
+        def alphabeta(b: chess.Board, depth: int, alpha: float, beta: float, maximizing: bool) -> int:
+            """Alpha-beta pruning: minimax with cutoffs.
+
+            Alpha is the best value the maximizer can guarantee (lower bound).
+            Beta is the best value the minimizer can guarantee (upper bound).
+            When alpha >= beta, we can prune (stop searching) this branch.
+            """
+            if depth == 0 or b.is_game_over():
+                return evaluate(b)
+
+            if maximizing:
+                max_eval = -10**12
+                for m in b.legal_moves:
+                    b.push(m)
+                    val = alphabeta(b, depth - 1, alpha, beta, False)
+                    b.pop()
+                    if val > max_eval:
+                        max_eval = val
+                    if max_eval > alpha:
+                        alpha = max_eval
+                    if alpha >= beta:
+                        break  # Beta cutoff: opponent won't allow this line
+                return max_eval
+            else:
+                min_eval = 10**12
+                for m in b.legal_moves:
+                    b.push(m)
+                    val = alphabeta(b, depth - 1, alpha, beta, True)
+                    b.pop()
+                    if val < min_eval:
+                        min_eval = val
+                    if min_eval < beta:
+                        beta = min_eval
+                    if alpha >= beta:
+                        break  # Alpha cutoff: we won't allow this line
+                return min_eval
+
+        # --- root move selection with alpha-beta ---
         legal = list(board.legal_moves)
         if not legal:
             # Should not happen during normal play; fall back defensively
@@ -212,17 +250,27 @@ class MyBot(ExampleEngine):
         maximizing = board.turn == chess.WHITE
         best_move = None
         best_eval = -10**12 if maximizing else 10**12
+        
+        # Initialize alpha-beta bounds at root
+        alpha = -10**12
+        beta = 10**12
 
         # Lookahead depth chosen by the simple time heuristic; subtract one for the root move
         for m in legal:
             board.push(m)
-            val = minimax(board, total_depth - 1, not maximizing)
+            val = alphabeta(board, total_depth - 1, alpha, beta, not maximizing)
             board.pop()
 
-            if maximizing and val > best_eval:
-                best_eval, best_move = val, m
-            elif not maximizing and val < best_eval:
-                best_eval, best_move = val, m
+            if maximizing:
+                if val > best_eval:
+                    best_eval, best_move = val, m
+                if val > alpha:
+                    alpha = val
+            else:
+                if val < best_eval:
+                    best_eval, best_move = val, m
+                if val < beta:
+                    beta = val
 
         # Fallback in rare cases (shouldn't trigger)
         if best_move is None:
