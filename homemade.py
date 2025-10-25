@@ -140,4 +140,4 @@ class MyBot(ExampleEngine):
         """
         # NOTE: This baseline keeps behavior simple and unchanged on purpose.
         # Replace this with your own logic (heuristics or a search algorithm).
-        return PlayResult(random.choice(list(board.legal_moves)), None)
+        return PlayResult(random.choice(list(board.legal_moves)))
