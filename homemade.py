@@ -146,16 +146,25 @@ class MyBot(ExampleEngine):
         inc = my_inc if isinstance(my_inc, (int, float)) else 0
         budget = (remaining or 0) + 2 * inc  # crude increment bonus
         if remaining is None:
-            total_depth = 4
+            total_depth = 5
         elif budget >= 60:
-            total_depth = 4
+            total_depth = 5
         elif budget >= 20:
-            total_depth = 3
+            total_depth = 4
         elif budget >= 5:
-            total_depth = 2
+            total_depth = 3
         else:
-            total_depth = 1
+            total_depth = 2
         total_depth = max(1, int(total_depth))
+
+        values = {
+                chess.PAWN: 100,
+                chess.KNIGHT: 320,
+                chess.BISHOP: 330,
+                chess.ROOK: 500,
+                chess.QUEEN: 900,
+                chess.KING: 0,  # king material ignored (checkmates handled above)
+            }
 
         # --- simple material evaluator (White-positive score) ---
         def evaluate(b: chess.Board) -> int:
@@ -178,11 +187,37 @@ class MyBot(ExampleEngine):
             for pt, v in values.items():
                 score += v * (len(b.pieces(pt, chess.WHITE)) - len(b.pieces(pt, chess.BLACK)))
             return score
+        
+        def evaluate_anti_draw(b: chess.Board) -> int:
+            base_eval = evaluate(b)
+
+            if b.is_repetition(2):
+                our_perspective_eval = base_eval if b.turn == chess.WHITE else -base_eval
+                
+                # Count total material to determine game phase
+                total_material = sum(len(b.pieces(pt, c)) * values[pt] 
+                                for pt in [chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN]
+                                for c in [chess.WHITE, chess.BLACK])
+                
+                # Adaptive threshold based on game phase
+                if total_material > 6000:  # Opening/middlegame (lots of pieces)
+                    threshold = 150  # Need bigger advantage (1.5 pawns) to avoid repetition
+                elif total_material > 3000:  # Middlegame transitioning to endgame
+                    threshold = 75   # Medium advantage needed (0.75 pawns)
+                else:  # Endgame (few pieces left)
+                    threshold = 25   # Even small advantage matters (0.25 pawns)
+                
+                if our_perspective_eval > threshold:
+                    # Scale penalty with advantage
+                    penalty = min(abs(our_perspective_eval) * 0.8, 500)
+                    base_eval = base_eval - penalty if b.turn == chess.WHITE else base_eval + penalty
+            
+            return base_eval
 
         # --- plain minimax (no alpha-beta) ---
         def minimax(b: chess.Board, depth: int, maximizing: bool) -> int:
             if depth == 0 or b.is_game_over():
-                return evaluate(b)
+                return evaluate_anti_draw(b)
 
             if maximizing:
                 best = -10**12
@@ -212,7 +247,7 @@ class MyBot(ExampleEngine):
             When alpha >= beta, we can prune (stop searching) this branch.
             """
             if depth == 0 or b.is_game_over():
-                return evaluate(b)
+                return evaluate_anti_draw(b)
 
             if maximizing:
                 max_eval = -10**12
