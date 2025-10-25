@@ -255,6 +255,70 @@ class MyBot(ExampleEngine):
                         best = val
                 return best
 
+        # --- quiescence search (capture chains) ---
+        def quiescence(b: chess.Board, alpha: float, beta: float) -> int:
+            """Search only tactical moves (captures/checks) until position is quiet.
+            
+            This prevents the horizon effect where the engine stops searching
+            in the middle of a capture sequence or tactical line.
+            
+            :param b: Current board position
+            :param alpha: Best value maximizer can guarantee
+            :param beta: Best value minimizer can guarantee
+            :return: Position evaluation after tactical sequences settle
+            """
+            # Stand pat: evaluate current position without any moves
+            stand_pat = evaluate_anti_draw(b)
+            
+            # Check if we're in a terminal position
+            if b.is_game_over():
+                return stand_pat
+            
+            # Determine who's to move
+            maximizing = b.turn == chess.WHITE
+            
+            if maximizing:
+                # Beta cutoff: position is already too good for opponent
+                if stand_pat >= beta:
+                    return beta
+                # Update alpha if standing pat is better
+                if stand_pat > alpha:
+                    alpha = stand_pat
+            else:
+                # Alpha cutoff: position is already too bad for us
+                if stand_pat <= alpha:
+                    return alpha
+                # Update beta if standing pat is better
+                if stand_pat < beta:
+                    beta = stand_pat
+            
+            # Generate only tactical moves (captures and checks)
+            tactical_moves = [m for m in b.legal_moves 
+                            if b.is_capture(m) or b.gives_check(m)]
+            
+            # Sort tactical moves (MVV-LVA ordering helps quiescence too!)
+            ordered_tactical = order_moves(b, tactical_moves)
+            
+            # Search tactical moves
+            for m in ordered_tactical:
+                b.push(m)
+                score = quiescence(b, alpha, beta)
+                b.pop()
+                
+                if maximizing:
+                    if score >= beta:
+                        return beta  # Beta cutoff
+                    if score > alpha:
+                        alpha = score
+                else:
+                    if score <= alpha:
+                        return alpha  # Alpha cutoff
+                    if score < beta:
+                        beta = score
+            
+            # Return the best score we found
+            return alpha if maximizing else beta
+
         # --- alpha-beta pruning (recursive, efficient) ---
         def alphabeta(b: chess.Board, depth: int, alpha: float, beta: float, maximizing: bool) -> int:
             """Alpha-beta pruning: minimax with cutoffs.
@@ -263,7 +327,11 @@ class MyBot(ExampleEngine):
             Beta is the best value the minimizer can guarantee (upper bound).
             When alpha >= beta, we can prune (stop searching) this branch.
             """
-            if depth == 0 or b.is_game_over():
+            # At leaf nodes, enter quiescence search instead of just evaluating
+            if depth == 0:
+                return quiescence(b, alpha, beta)
+            
+            if b.is_game_over():
                 return evaluate_anti_draw(b)
 
             # Order moves for better pruning
