@@ -42,7 +42,7 @@ engine:                            # Engine settings.
   online_moves:
     max_out_of_book_moves: 4      # Stop using online opening books after they don't have a move for 'max_out_of_book_moves' positions. Doesn't apply to the online endgame tablebases.
     max_retries: 2                 # The maximum amount of retries when getting an online move.
-    # max_depth: 10                # How many moves from the start to take from online books. Default is no limit.
+    max_depth: 5                # How many moves from the start to take from online books. Default is no limit.
     chessdb_book:
       enabled: true               # Whether or not to use chessdb book.
       min_time: 20                 # Minimum time (in seconds) to use chessdb book.
@@ -50,7 +50,7 @@ engine:                            # Engine settings.
       move_quality: "good"         # One of "all", "good", "best".
       min_depth: 20                # Only for move_quality: "best".
     lichess_cloud_analysis:
-      enabled: false               # Whether or not to use lichess cloud analysis.
+      enabled: true               # Whether or not to use lichess cloud analysis.
       min_time: 20                 # Minimum time (in seconds) the bot must have to use cloud analysis.
       max_time: 10800              # Maximum starting game time (in seconds) the bot must have to use cloud analysis.
       move_quality: "best"         # One of "good", "best".
@@ -58,7 +58,7 @@ engine:                            # Engine settings.
       min_depth: 20
       min_knodes: 0
     lichess_opening_explorer:
-      enabled: false
+      enabled: true
       min_time: 20
       max_time: 10800              # Maximum starting game time (in seconds) the bot must have to use the lichess opening explorer.
       source: "masters"            # One of "lichess", "masters", "player"
@@ -66,7 +66,7 @@ engine:                            # Engine settings.
       sort: "winrate"              # One of "winrate", "games_played"
       min_games: 10                # Minimum number of times a move must have been played to be chosen.
     online_egtb:
-      enabled: false               # Whether or not to enable online endgame tablebases.
+      enabled: true              # Whether or not to enable online endgame tablebases.
       min_time: 20                 # Minimum time (in seconds) the bot must have to use online EGTBs.
       max_time: 10800              # Maximum starting game time (in seconds) the bot must have to use online EGTBs.
       max_pieces: 7                # Maximum number of pieces on the board to use endgame tablebases.

@@ -78,12 +78,34 @@ During tournament time we will be using the lichess GUI to send match challenges
 
 ## Algorithms You Should Check Out
 ### Minimax Search
-### Alpha-Beta Pruning
-### Iterative Deepening
-### Transposition Tables
+- Core game-tree algorithm: alternate maximizing (your move) and minimizing (opponent) to a fixed depth, then evaluate the leaf with a heuristic.
+- Benefits: simple and correct baseline; yields a principal variation (best line) you can display; foundation for all other improvements.
 
-## Recommended watching
+### Alpha-Beta Pruning and Move Ordering
+- Alpha-beta keeps best known bounds and prunes branches that cannot influence the final choice; same result as minimax but visits far fewer nodes.
+- Good move ordering (e.g., PV move first, captures/checks first, killer/history heuristics) increases pruning effectiveness dramatically.
+- Benefits: large speedups (often 10x+), allowing deeper search within the same time budget.
+
+### Capture Chains
+- Also called quiescence search: when the frontier is "noisy", extend the search along forcing moves (captures, checks, promotions) until the position becomes quiet.
+- Benefits: reduces horizon effects and tactical blunders; stabilizes evaluation in sharp positions.
+
+### Iterative Deepening
+- Search depth 1, then 2, etc., until time runs out; each iteration uses results from the previous one for better move ordering.
+- Benefits: natural time control (you can stop anytime with the current best move), improved ordering via the previous principal variation, and better responsiveness.
+
+### Transposition Tables
+- Cache evaluated positions using a Zobrist hash; store score, depth, node type (exact/alpha/beta), and best move.
+- Reuse cached results when the same position is reached via different move orders, and try the TT move first to improve ordering.
+- Benefits: avoids re-searching repeated positions, increases pruning, and accelerates deep searches.
+
+### Piece Square Tables
+- Simple evaluation technique: assign values to pieces based on their type and position on the board using pre-defined tables.
+- Benefits: fast and effective way to capture positional nuances without complex evaluation functions.
+
+## Resources
 - Great video on chess engine development that covers some of the above algorithms in detail: https://www.youtube.com/watch?v=U4ogK0MIzqk&t=1008s (Note you can skip the parts that cover board representation and move generation since those are already implemented for you in this starter code).
+- Check out the documentation for the python-chess library used in this starter code: https://python-chess.readthedocs.io/en/v1.11.2/ . This will give you a sense of what functions are available for you to use in your bot implementation. The python chess library board representation has lots of helper functions for evaluating board state, for example if pieces are attacking each other, generating legal moves, etc.
 
 ## Citation
 If this software has been used for research purposes, please cite it using the "Cite this repository" menu on the right sidebar. For more information, check the [CITATION file](https://github.com/lichess-bot-devs/lichess-bot/blob/master/CITATION.cff).
